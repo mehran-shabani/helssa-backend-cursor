@@ -1,0 +1,8 @@
+Django>=4.2,<5.0
+djangorestframework>=3.14,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+# Note: kavenegar is unmaintained (last update: May 2018)
+# Consider migrating to: aio-kavenegar, requests/httpx with Kavenegar API, or another SMS provider
+kavenegar>=1.1.2
+Pillow>=10.0,<11.0
+python-decouple>=3.8
