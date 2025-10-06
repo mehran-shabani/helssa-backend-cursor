@@ -83,19 +83,66 @@ class VerifyOTPView(APIView):
         try:
             user = User.objects.get(phone_number=phone_number)
         except User.DoesNotExist:
-            user = None
-        
-        if not user or user.auth_code != code:
             return Response({'error': 'اطلاعات ورود نامعتبر است'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check if account is locked
+        if user.auth_locked_until and timezone.now() < user.auth_locked_until:
+            remaining = (user.auth_locked_until - timezone.now()).seconds // 60
+            return Response(
+                {'error': f'حساب به مدت {remaining} دقیقه قفل شده است. لطفاً بعداً تلاش کنید'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+        
+        # Check OTP expiry
+        if not user.auth_code_created_at:
+            return Response({'error': 'کد منقضی شده است. لطفاً کد جدید درخواست کنید'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        otp_age = timezone.now() - user.auth_code_created_at
+        if otp_age > timedelta(minutes=OTP_EXPIRY_MINUTES):
+            # Clear expired OTP
+            user.auth_code = None
+            user.auth_code_created_at = None
+            user.auth_attempts = 0
+            user.save(update_fields=['auth_code', 'auth_code_created_at', 'auth_attempts'])
+            return Response({'error': 'کد منقضی شده است. لطفاً کد جدید درخواست کنید'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify code
+        if user.auth_code != code:
+            # Increment attempts
+            user.auth_attempts += 1
+            
+            # Lock account if too many attempts
+            if user.auth_attempts >= MAX_OTP_ATTEMPTS:
+                user.auth_locked_until = timezone.now() + timedelta(minutes=LOCK_DURATION_MINUTES)
+                user.save(update_fields=['auth_attempts', 'auth_locked_until'])
+                return Response(
+                    {'error': f'تعداد تلاش‌های نادرست بیش از حد مجاز. حساب برای {LOCK_DURATION_MINUTES} دقیقه قفل شد'},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            user.save(update_fields=['auth_attempts'])
+            remaining_attempts = MAX_OTP_ATTEMPTS - user.auth_attempts
+            return Response(
+                {'error': f'کد نادرست است. {remaining_attempts} تلاش باقی مانده'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Successful verification
         is_first_login = user.last_login is None
         
         with transaction.atomic():
             user.auth_code = None
+            user.auth_code_created_at = None
+            user.auth_attempts = 0
+            user.auth_locked_until = None
             user.is_active = True
             user.last_login = timezone.now()
-            user.save(update_fields=['auth_code', 'is_active', 'last_login'])
+            user.save(update_fields=[
+                'auth_code', 'auth_code_created_at', 'auth_attempts', 
+                'auth_locked_until', 'is_active', 'last_login'
+            ])
         
+        # Send welcome message for first login
         if is_first_login:
             try:
                 api = KavenegarAPI(settings.KAVEH_NEGAR_API_KEY)
@@ -104,6 +151,7 @@ class VerifyOTPView(APIView):
                     'token': '',
                     'template': 'first-log'
                 })
+                logger.info(f'پیام خوش‌آمدگویی به شماره {phone_number} ارسال شد')
             except Exception as e:
                 logger.exception(f'خطا در ارسال پیام خوش‌آمدگویی به شماره {phone_number}: {str(e)}')
         
