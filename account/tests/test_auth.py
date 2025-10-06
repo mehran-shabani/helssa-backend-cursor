@@ -96,8 +96,7 @@ class OTPAuthTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('اطلاعات ورود نامعتبر است', response.data['error'])
     
-    @patch('account.views.KavenegarAPI')
-    def test_profile_get(self, mock_kavenegar):
+    def test_profile_get(self):
         user = User.objects.create(phone_number='09123456789')
         self.client.force_authenticate(user=user)
         
@@ -105,7 +104,6 @@ class OTPAuthTestCase(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['phone_number'], '09123456789')
-    
     @patch('account.views.KavenegarAPI')
     def test_profile_update(self, mock_kavenegar):
         user = User.objects.create(phone_number='09123456789')
