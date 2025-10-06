@@ -4,12 +4,18 @@ from django.utils import timezone
 
 
 class CustomUserManager(BaseUserManager):
-    def create_user(self, phone_number=None, username=None, email=None, password=None, **extra_fields):
-        if not phone_number and not username:
-            raise ValueError('کاربر باید شماره تلفن یا نام کاربری داشته باشد')
+    def create_user(self, phone_number, username=None, email=None, password=None, **extra_fields):
+        if not phone_number:
+            raise ValueError('شماره تلفن الزامی است')
+        
+        # Normalize phone number
+        phone_number = phone_number.strip()
         
         if email:
             email = self.normalize_email(email)
+        
+        # Ensure is_active defaults to False unless explicitly set
+        extra_fields.setdefault('is_active', False)
         
         user = self.model(
             phone_number=phone_number,
@@ -23,7 +29,7 @@ class CustomUserManager(BaseUserManager):
         user.save(using=self._db)
         return user
     
-    def create_superuser(self, phone_number=None, username=None, email=None, password=None, **extra_fields):
+    def create_superuser(self, phone_number, username=None, email=None, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
@@ -37,15 +43,19 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    phone_number = models.CharField(max_length=11, unique=True, null=True, blank=True, db_index=True)
+    phone_number = models.CharField(max_length=11, unique=True, db_index=True)
     username = models.CharField(max_length=150, unique=True, null=True, blank=True)
     email = models.EmailField(blank=True, null=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     
+    # OTP fields
     auth_code = models.IntegerField(null=True, blank=True)
+    auth_code_created_at = models.DateTimeField(null=True, blank=True)
+    auth_attempts = models.IntegerField(default=0)
+    auth_locked_until = models.DateTimeField(null=True, blank=True)
     
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     
     date_joined = models.DateTimeField(default=timezone.now)
