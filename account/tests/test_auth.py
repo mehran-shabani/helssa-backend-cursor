@@ -11,6 +11,7 @@ User = get_user_model()
 
 
 @override_settings(
+    KAVEH_NEGAR_API_KEY='test-api-key',
     REST_FRAMEWORK={
         'DEFAULT_THROTTLE_RATES': {
             'otp': '1000/min',
