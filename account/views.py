@@ -1,4 +1,4 @@
-import random
+import secrets
 import logging
 from rest_framework import status
 from rest_framework.views import APIView
