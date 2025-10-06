@@ -84,14 +84,14 @@ class OTPAuthTestCase(TestCase):
         response = self.client.post(self.verify_url, data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('کد نادرست است', response.data['error'])
+        self.assertIn('اطلاعات ورود نامعتبر است', response.data['error'])
     
     def test_verify_otp_user_not_found(self):
         data = {'phone_number': '09123456789', 'code': 123456}
         response = self.client.post(self.verify_url, data)
         
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn('کاربر یافت نشد', response.data['error'])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('اطلاعات ورود نامعتبر است', response.data['error'])
     
     @patch('account.views.KavenegarAPI')
     def test_profile_get(self, mock_kavenegar):

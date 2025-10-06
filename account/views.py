@@ -1,4 +1,5 @@
 import random
+import logging
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -6,12 +7,15 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
 from kavenegar import KavenegarAPI
 from django.conf import settings
 
 from .serializers import RequestOTPSerializer, VerifyOTPSerializer, ProfileSerializer
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class RequestOTPView(APIView):
@@ -39,7 +43,7 @@ class RequestOTPView(APIView):
                 'template': 'users'
             })
         except Exception as e:
-            pass
+            logger.exception(f'خطا در ارسال کد OTP به شماره {phone_number}: {str(e)}')
         
         return Response({'message': 'کد تایید ارسال شد'}, status=status.HTTP_200_OK)
 
@@ -60,16 +64,18 @@ class VerifyOTPView(APIView):
         try:
             user = User.objects.get(phone_number=phone_number)
         except User.DoesNotExist:
-            return Response({'error': 'کاربر یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
+            user = None
         
-        if user.auth_code != code:
-            return Response({'error': 'کد نادرست است'}, status=status.HTTP_400_BAD_REQUEST)
+        if not user or user.auth_code != code:
+            return Response({'error': 'اطلاعات ورود نامعتبر است'}, status=status.HTTP_400_BAD_REQUEST)
         
         is_first_login = user.last_login is None
         
-        user.auth_code = None
-        user.is_active = True
-        user.save()
+        with transaction.atomic():
+            user.auth_code = None
+            user.is_active = True
+            user.last_login = timezone.now()
+            user.save(update_fields=['auth_code', 'is_active', 'last_login'])
         
         if is_first_login:
             try:
@@ -80,7 +86,7 @@ class VerifyOTPView(APIView):
                     'template': 'first-log'
                 })
             except Exception as e:
-                pass
+                logger.exception(f'خطا در ارسال پیام خوش‌آمدگویی به شماره {phone_number}: {str(e)}')
         
         refresh = RefreshToken.for_user(user)
         
@@ -99,6 +105,14 @@ class ProfileView(APIView):
         return Response(serializer.data)
     
     def put(self, request):
+        serializer = ProfileSerializer(request.user, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        return Response(serializer.data)
+    
+    def patch(self, request):
         serializer = ProfileSerializer(request.user, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

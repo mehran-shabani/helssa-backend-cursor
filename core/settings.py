@@ -5,14 +5,15 @@ Django settings for core project.
 import os
 from pathlib import Path
 from datetime import timedelta
+from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-change-this-in-production'
+SECRET_KEY = config('SECRET_KEY')
 
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -94,7 +95,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'account.CustomUser'
 
-KAVEH_NEGAR_API_KEY = os.environ.get('KAVEH_NEGAR_API_KEY', '')
+KAVEH_NEGAR_API_KEY = config('KAVEH_NEGAR_API_KEY')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -103,7 +104,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_THROTTLE_RATES': {
-        'otp': '3/min',
+        'otp': config('OTP_THROTTLE_RATE', default='3/min'),
     }
 }
 
