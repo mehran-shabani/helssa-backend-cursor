@@ -50,19 +50,20 @@ class OTPAuthTestCase(TestCase):
     def test_verify_otp_success(self, mock_kavenegar):
         mock_api = MagicMock()
         mock_kavenegar.return_value = mock_api
-        
+
         user = User.objects.create(phone_number='09123456789', auth_code=123456)
-        
+
         data = {'phone_number': '09123456789', 'code': 123456}
         response = self.client.post(self.verify_url, data)
-        
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
-        
+        self.assertIn('ورود موفق', response.data.get('message', ''))
+
         user.refresh_from_db()
         self.assertIsNone(user.auth_code)
-    
+        self.assertTrue(user.is_active)
     @patch('account.views.KavenegarAPI')
     def test_verify_otp_first_login(self, mock_kavenegar):
         mock_api = MagicMock()
