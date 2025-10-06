@@ -28,22 +28,24 @@ class OTPAuthTestCase(TestCase):
     def test_request_otp_success(self, mock_kavenegar):
         mock_api = MagicMock()
         mock_kavenegar.return_value = mock_api
-        
+
         data = {'phone_number': '09123456789'}
-        response = self.client.post(self.register_url, data)
-        
+        response = self.client.post(self.register_url, data, format='json')
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('کد تایید ارسال شد', response.data['message'])
-        
+
         user = User.objects.get(phone_number='09123456789')
         self.assertIsNotNone(user.auth_code)
         self.assertTrue(100000 <= user.auth_code <= 999999)
-        
+
         mock_api.verify_lookup.assert_called_once()
         call_args = mock_api.verify_lookup.call_args[0][0]
         self.assertEqual(call_args['receptor'], '09123456789')
         self.assertEqual(call_args['template'], 'users')
-    
+        self.assertEqual(call_args['token'], str(user.auth_code))
+        # KavenegarAPI باید با کلید تنظیمات صدا شده باشه
+        mock_kavenegar.assert_called_once_with(settings.KAVEH_NEGAR_API_KEY)
     @patch('account.views.KavenegarAPI')
     def test_verify_otp_success(self, mock_kavenegar):
         mock_api = MagicMock()
