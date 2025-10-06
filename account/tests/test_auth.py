@@ -1,6 +1,8 @@
 from unittest.mock import patch, MagicMock
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.conf import settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
@@ -51,7 +53,11 @@ class OTPAuthTestCase(TestCase):
         mock_api = MagicMock()
         mock_kavenegar.return_value = mock_api
 
-        user = User.objects.create(phone_number='09123456789', auth_code=123456)
+        user = User.objects.create(
+            phone_number='09123456789', 
+            auth_code=123456,
+            auth_code_created_at=timezone.now()
+        )
 
         data = {'phone_number': '09123456789', 'code': 123456}
         response = self.client.post(self.verify_url, data)
@@ -64,30 +70,66 @@ class OTPAuthTestCase(TestCase):
         user.refresh_from_db()
         self.assertIsNone(user.auth_code)
         self.assertTrue(user.is_active)
+        self.assertIsNotNone(user.last_login)
     @patch('account.views.KavenegarAPI')
     def test_verify_otp_first_login(self, mock_kavenegar):
         mock_api = MagicMock()
         mock_kavenegar.return_value = mock_api
         
-        user = User.objects.create(phone_number='09123456789', auth_code=123456)
+        user = User.objects.create(
+            phone_number='09123456789', 
+            auth_code=123456,
+            auth_code_created_at=timezone.now()
+        )
         
         data = {'phone_number': '09123456789', 'code': 123456}
         response = self.client.post(self.verify_url, data)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
+        # Assert first-login welcome message was sent
         calls = mock_api.verify_lookup.call_args_list
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0][0]['template'], 'first-log')
+        self.assertEqual(calls[0][0][0]['receptor'], '09123456789')
+        self.assertEqual(calls[0][0][0]['token'], '')
+    
+    @patch('account.views.KavenegarAPI')
+    def test_verify_otp_second_login_no_first_log(self, mock_kavenegar):
+        """Test that second login does NOT send first-log template"""
+        mock_api = MagicMock()
+        mock_kavenegar.return_value = mock_api
+        
+        # First login cycle: request OTP and verify
+        self.client.post(self.register_url, {'phone_number': '09123456789'}, format='json')
+        user = User.objects.get(phone_number='09123456789')
+        first_code = user.auth_code
+        self.client.post(self.verify_url, {'phone_number': '09123456789', 'code': first_code}, format='json')
+        
+        # Reset mock for second login
+        mock_api.verify_lookup.reset_mock()
+        
+        # Second login cycle: request OTP again and verify
+        self.client.post(self.register_url, {'phone_number': '09123456789'}, format='json')
+        user.refresh_from_db()
+        second_code = user.auth_code
+        self.client.post(self.verify_url, {'phone_number': '09123456789', 'code': second_code}, format='json')
+        
+        # Assert NO first-log message was sent for second login
+        self.assertEqual(mock_api.verify_lookup.call_count, 0)
     
     def test_verify_otp_wrong_code(self):
-        user = User.objects.create(phone_number='09123456789', auth_code=123456)
+        user = User.objects.create(
+            phone_number='09123456789', 
+            auth_code=123456,
+            auth_code_created_at=timezone.now()
+        )
         
         data = {'phone_number': '09123456789', 'code': 654321}
         response = self.client.post(self.verify_url, data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('اطلاعات ورود نامعتبر است', response.data['error'])
+        self.assertIn('کد نادرست است', response.data['error'])
     
     def test_verify_otp_user_not_found(self):
         data = {'phone_number': '09123456789', 'code': 123456}
