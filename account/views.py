@@ -1,5 +1,6 @@
 import secrets
 import logging
+from datetime import timedelta
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -17,6 +18,11 @@ from .serializers import RequestOTPSerializer, VerifyOTPSerializer, ProfileSeria
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
+# OTP Configuration
+OTP_EXPIRY_MINUTES = 5
+MAX_OTP_ATTEMPTS = 3
+LOCK_DURATION_MINUTES = 15
+
 
 class RequestOTPView(APIView):
     permission_classes = [AllowAny]
@@ -29,12 +35,23 @@ class RequestOTPView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         phone_number = serializer.validated_data['phone_number']
-        auth_code = random.randint(100000, 999999)
         
-        user, created = User.objects.get_or_create(phone_number=phone_number)
+        # Generate cryptographically secure OTP
+        auth_code = secrets.randbelow(900000) + 100000
+        
+        user, created = User.objects.get_or_create(
+            phone_number=phone_number,
+            defaults={'is_active': False}
+        )
+        
+        # Reset OTP fields
         user.auth_code = auth_code
-        user.save()
+        user.auth_code_created_at = timezone.now()
+        user.auth_attempts = 0
+        user.auth_locked_until = None
+        user.save(update_fields=['auth_code', 'auth_code_created_at', 'auth_attempts', 'auth_locked_until'])
         
+        # Send OTP via SMS
         try:
             api = KavenegarAPI(settings.KAVEH_NEGAR_API_KEY)
             api.verify_lookup({
@@ -42,8 +59,10 @@ class RequestOTPView(APIView):
                 'token': str(auth_code),
                 'template': 'users'
             })
+            logger.info(f'کد OTP با موفقیت به شماره {phone_number} ارسال شد')
         except Exception as e:
             logger.exception(f'خطا در ارسال کد OTP به شماره {phone_number}: {str(e)}')
+            # Continue even if SMS fails (for development/testing)
         
         return Response({'message': 'کد تایید ارسال شد'}, status=status.HTTP_200_OK)
 
