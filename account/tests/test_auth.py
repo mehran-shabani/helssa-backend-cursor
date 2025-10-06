@@ -118,30 +118,18 @@ class OTPAuthTestCase(TestCase):
     
 
 
-@override_settings(
-    REST_FRAMEWORK={
-        'DEFAULT_THROTTLE_RATES': {
-            'otp': '3/min',
-        }
-    }
-)
-class OTPThrottlingTestCase(TestCase):
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
-        self.client = APIClient()
-        self.register_url = reverse('request-otp')
-    
     @patch('account.views.KavenegarAPI')
     def test_otp_throttling(self, mock_kavenegar):
         mock_api = MagicMock()
         mock_kavenegar.return_value = mock_api
-        
+
         data = {'phone_number': '09123456789'}
-        
+
         for i in range(3):
             response = self.client.post(self.register_url, data)
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+            self.assertIn('کد تایید ارسال شد', response.data.get('message', ''))
+
         response = self.client.post(self.register_url, data)
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertIn('throttled', str(response.data).lower())
