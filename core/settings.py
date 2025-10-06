@@ -97,6 +97,10 @@ AUTH_USER_MODEL = 'account.CustomUser'
 
 KAVEH_NEGAR_API_KEY = config('KAVEH_NEGAR_API_KEY')
 
+# BitPay settings
+BITPAY_API_KEY = config('BITPAY_API_KEY')
+SITE_URL = config('SITE_URL', default='http://localhost:8000')
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
