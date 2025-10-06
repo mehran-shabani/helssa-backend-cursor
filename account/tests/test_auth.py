@@ -104,14 +104,13 @@ class OTPAuthTestCase(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['phone_number'], '09123456789')
-    @patch('account.views.KavenegarAPI')
-    def test_profile_update(self, mock_kavenegar):
+    def test_profile_update(self):
         user = User.objects.create(phone_number='09123456789')
         self.client.force_authenticate(user=user)
-        
+
         data = {'username': 'testuser', 'email': 'test@example.com'}
-        response = self.client.put(self.profile_url, data)
-        
+        response = self.client.put(self.profile_url, data, format='json')
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         user.refresh_from_db()
         self.assertEqual(user.username, 'testuser')
